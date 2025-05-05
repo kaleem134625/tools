@@ -1,0 +1,103 @@
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const cors = require('cors');
+const fs = require('fs');
+
+const app = express();
+const PORT = 5000;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Configure storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(__dirname, 'uploads');
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage,
+  fileFilter: (req, file, cb) => {
+    const filetypes = /jpeg|jpg|png|gif/;
+    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = filetypes.test(file.mimetype);
+    
+    if (extname && mimetype) {
+      return cb(null, true);
+    } else {
+      cb('Error: Images only!');
+    }
+  }
+});
+
+// In-memory database (replace with real DB in production)
+let posts = [
+  {
+    _id: '1',
+    userId: 'demo_user',
+    caption: 'Welcome to InstaClone!',
+    imageUrl: 'sample.jpg',
+    likes: 15,
+    comments: []
+  },
+  {
+    _id: '2',
+    userId: 'demo_user',
+    caption: 'This is my second post',
+    imageUrl: 'sample2.jpg',
+    likes: 8,
+    comments: []
+  }
+];
+
+// Routes
+app.get('/api/posts', (req, res) => {
+  res.json(posts);
+});
+
+app.post('/api/posts', upload.single('image'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Please upload an image' });
+    }
+
+    const { caption, userId } = req.body;
+    
+    const newPost = {
+      _id: Date.now().toString(),
+      userId,
+      caption,
+      imageUrl: req.file.filename,
+      likes: 0,
+      comments: [],
+      createdAt: new Date().toISOString()
+    };
+
+    posts.unshift(newPost);
+    res.status(201).json(newPost);
+  } catch (error) {
+    console.error('Error creating post:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
